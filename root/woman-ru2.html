@@ -215,6 +215,29 @@
   <!-- Мок нижнего рекламного блока (мобильная версия). Заглушка 100px,
        full-width; «пимпочка» с крестиком выпирает сверху справа (без логики). -->
   <style>
+
+      /* Подсветка пустых рекламных блоков статичного демо: серый фон + подпись «Реклама». */
+      .creative._hb-top,
+      .creative-container.mobile-fluid._vb-1._ArticlesPage {
+          position: relative;
+          min-height: 90px;
+          background: #e0e0e0;
+      }
+      .creative._hb-top::before,
+      .creative-container.mobile-fluid._vb-1._ArticlesPage::before {
+          content: "Реклама";
+          position: absolute;
+          top: 8px;
+          left: 50%;
+          transform: translateX(-50%);
+          z-index: 1;
+          color: #999;
+          font: 600 13px/16px "Roboto", sans-serif;
+          text-transform: uppercase;
+          letter-spacing: 0.04em;
+      }
+
+
     .demo-ad-stub { display: none; }
     @media (max-width: 767px) {
       .demo-ad-stub {

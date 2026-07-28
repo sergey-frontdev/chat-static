@@ -1,0 +1,661 @@
+<!doctype html>
+<html lang="ru">
+
+<head>
+    <meta charset="UTF-8"/>
+    <link rel="icon" type="image/svg+xml" href="root/logo.svg"/>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+            href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&display=swap"
+            rel="stylesheet">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, interactive-widget=resizes-content">
+    <title>TTII Chat — стенд</title>
+    <style>
+        /* Все стили стенда с префиксом pg- : виджет живёт в shadow root и не пересекается. */
+        .pg-panel, .pg-panel * { box-sizing: border-box; }
+
+        .pg-toggle {
+            position: fixed; top: 12px; left: 12px; z-index: 2147483000;
+            font: 500 13px/1 'Inter', system-ui, sans-serif;
+            padding: 10px 14px; border-radius: 10px; cursor: pointer;
+            background: #111; color: #fff; border: none;
+            box-shadow: 0 6px 20px rgba(0, 0, 0, .25);
+        }
+
+        .pg-panel {
+            position: fixed; top: 12px; left: 12px; z-index: 2147482999;
+            width: 360px; max-width: calc(100vw - 24px); max-height: calc(100vh - 24px);
+            overflow: auto; padding: 14px;
+            font: 400 13px/1.45 'Inter', system-ui, sans-serif; color: #14181f;
+            background: #fff; border: 1px solid #e3e7ee; border-radius: 14px;
+            box-shadow: 0 12px 40px rgba(16, 24, 40, .18);
+        }
+
+        .pg-panel[hidden], .pg-toggle[hidden] { display: none; }
+
+        .pg-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+        .pg-head h1 { font-size: 15px; font-weight: 600; margin: 0; }
+        .pg-x {
+            border: none; background: #f1f3f7; border-radius: 8px; cursor: pointer;
+            width: 26px; height: 26px; font-size: 15px; line-height: 1; color: #5a6472;
+        }
+
+        .pg-group { border-top: 1px solid #edf0f5; padding: 10px 0 2px; }
+        .pg-group > h2 {
+            font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase;
+            color: #7a8598; margin: 0 0 8px;
+        }
+
+        .pg-opt {
+            display: flex; gap: 8px; align-items: flex-start;
+            padding: 5px 6px; border-radius: 8px; cursor: pointer;
+        }
+        .pg-opt:hover { background: #f7f9fc; }
+        .pg-opt input { margin: 2px 0 0; flex: none; accent-color: #111; }
+        .pg-opt b { font-weight: 500; display: block; }
+        .pg-opt small { color: #8a94a6; font-size: 11px; word-break: break-all; }
+
+        .pg-row { display: flex; gap: 6px; flex-wrap: wrap; }
+        .pg-row .pg-opt { flex: 1 1 auto; }
+
+        .pg-input, .pg-select, .pg-code {
+            width: 100%; padding: 7px 9px; margin-top: 6px;
+            border: 1px solid #dde2ea; border-radius: 8px; background: #fff;
+            font: inherit; color: inherit;
+        }
+        .pg-code {
+            font: 400 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+            min-height: 150px; resize: vertical; white-space: pre; tab-size: 2;
+        }
+
+        .pg-btn {
+            padding: 8px 12px; border-radius: 9px; border: 1px solid #dde2ea;
+            background: #fff; color: #14181f; font: 500 12px/1 'Inter', system-ui, sans-serif; cursor: pointer;
+        }
+        .pg-btn:hover { background: #f5f7fa; }
+        .pg-btn.pg-primary { background: #111; border-color: #111; color: #fff; }
+        .pg-btn.pg-dirty { background: #1d6ef5; border-color: #1d6ef5; color: #fff; }
+
+        .pg-actions {
+            position: sticky; bottom: -14px; display: flex; gap: 6px; flex-wrap: wrap;
+            padding: 10px 0 2px; margin-top: 8px; background: #fff; border-top: 1px solid #edf0f5;
+        }
+
+        .pg-hint { color: #8a94a6; font-size: 11px; margin: 6px 0 0; }
+        .pg-links { display: flex; flex-wrap: wrap; gap: 4px; }
+        .pg-links a {
+            font-size: 11px; color: #4a5566; text-decoration: none;
+            padding: 4px 7px; border: 1px solid #e6eaf1; border-radius: 999px;
+        }
+        .pg-links a:hover { border-color: #b9c3d3; }
+
+        .pg-status {
+            margin-top: 8px; padding: 7px 9px; border-radius: 8px; font-size: 11px;
+            background: #f1f5fb; color: #43506a;
+        }
+        .pg-status.pg-err { background: #fdeceb; color: #99342c; }
+
+        @media (max-width: 640px) {
+            .pg-panel { width: calc(100vw - 24px); }
+        }
+    </style>
+</head>
+
+<body id="vtb">
+
+<button class="pg-toggle" type="button" id="pgToggle" hidden>⚙︎ Стенд чата</button>
+
+<aside class="pg-panel" id="pgPanel" hidden>
+    <div class="pg-head">
+        <h1>Стенд TTII Chat</h1>
+        <button class="pg-x" type="button" id="pgClose" title="Свернуть">×</button>
+    </div>
+
+    <div class="pg-group">
+        <h2>Какой чат подключить</h2>
+        <div id="pgChats"></div>
+        <input class="pg-input" id="pgCustomSrc" type="text" placeholder="https://… или root/assets/my-chat.js" hidden>
+        <select class="pg-select" id="pgCustomType" hidden>
+            <option value="module">type="module" (сборки vite)</option>
+            <option value="classic">обычный &lt;script defer&gt; (как chat.js с CDN)</option>
+        </select>
+    </div>
+
+    <div class="pg-group">
+        <h2>Лаунчер</h2>
+        <div class="pg-row" id="pgLaunchers"></div>
+    </div>
+
+    <div class="pg-group">
+        <h2>Размер окна</h2>
+        <div class="pg-row" id="pgSizes"></div>
+        <label class="pg-opt"><input type="checkbox" id="pgMobile"><span><b>Показывать на мобильных</b><small>window.TTII_DISABLE_ON_MOBILE = false</small></span></label>
+    </div>
+
+    <div class="pg-group">
+        <h2>Свой скрипт (инжект до загрузки чата)</h2>
+        <select class="pg-select" id="pgSnippets"></select>
+        <div class="pg-row" style="margin-top:6px">
+            <button class="pg-btn" type="button" id="pgSnipInsert">Вставить</button>
+            <button class="pg-btn" type="button" id="pgSnipReplace">Заменить</button>
+            <button class="pg-btn" type="button" id="pgSnipSave">Сохранить как свой…</button>
+            <button class="pg-btn" type="button" id="pgSnipDelete">Удалить свой</button>
+        </div>
+        <textarea class="pg-code" id="pgCode" spellcheck="false" placeholder="// JS, который выполнится до подключения чата"></textarea>
+        <p class="pg-hint">Код выполняется синхронно перед вставкой скрипта чата — можно задавать
+            <code>window.TTII_*</code>.</p>
+    </div>
+
+    <div class="pg-group">
+        <h2>Тема страницы</h2>
+        <div class="pg-row" id="pgThemes"></div>
+    </div>
+
+    <div class="pg-group">
+        <h2>Готовые демо-страницы</h2>
+        <div class="pg-links" id="pgDemos"></div>
+    </div>
+
+    <div class="pg-actions">
+        <button class="pg-btn pg-primary" type="button" id="pgApply">Применить</button>
+        <button class="pg-btn" type="button" id="pgCopy">Ссылка</button>
+        <button class="pg-btn" type="button" id="pgReset">Сброс</button>
+    </div>
+    <div class="pg-status" id="pgStatus"></div>
+</aside>
+
+<!-- Демо-статья: длинный скроллящийся контент для проверки прозрачности чата -->
+<article style="max-width: 720px; margin: 0 auto 200px; padding: 0 16px; font-family: 'Inter', sans-serif; line-height: 1.7; color: #1a1a1a;">
+    <h1 style="font-size: 32px; line-height: 1.2; margin: 24px 0 8px;">Lorem Ipsum: история наполнительного текста</h1>
+    <p style="color: #777; margin: 0 0 24px;">23 июня 2026 · 6 минут чтения</p>
+
+    <img src="https://picsum.photos/720/360" alt="Заглавное изображение"
+         style="width: 100%; height: auto; border-radius: 12px; margin: 0 0 24px;">
+
+    <p>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.</p>
+    <p>Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.</p>
+
+    <h2 style="font-size: 24px; margin: 32px 0 12px;">Sed ut perspiciatis</h2>
+    <p>Sed ut perspiciatis unde omnis iste natus error sit voluptatem accusantium doloremque laudantium, totam rem aperiam, eaque ipsa quae ab illo inventore veritatis et quasi architecto beatae vitae dicta sunt explicabo.</p>
+    <p>Nemo enim ipsam voluptatem quia voluptas sit aspernatur aut odit aut fugit, sed quia consequuntur magni dolores eos qui ratione voluptatem sequi nesciunt. Neque porro quisquam est, qui dolorem ipsum quia dolor sit amet.</p>
+
+    <img src="https://picsum.photos/720/400?random=2" alt="Иллюстрация"
+         style="width: 100%; height: auto; border-radius: 12px; margin: 24px 0;">
+
+    <h2 style="font-size: 24px; margin: 32px 0 12px;">At vero eos</h2>
+    <p>At vero eos et accusamus et iusto odio dignissimos ducimus qui blanditiis praesentium voluptatum deleniti atque corrupti quos dolores et quas molestias excepturi sint occaecati cupiditate non provident.</p>
+    <p>Similique sunt in culpa qui officia deserunt mollitia animi, id est laborum et dolorum fuga. Et harum quidem rerum facilis est et expedita distinctio. Nam libero tempore, cum soluta nobis est eligendi optio.</p>
+    <p>Temporibus autem quibusdam et aut officiis debitis aut rerum necessitatibus saepe eveniet ut et voluptates repudiandae sint et molestiae non recusandae. Itaque earum rerum hic tenetur a sapiente delectus.</p>
+
+    <h2 style="font-size: 24px; margin: 32px 0 12px;">Quis autem</h2>
+    <p>Quis autem vel eum iure reprehenderit qui in ea voluptate velit esse quam nihil molestiae consequatur, vel illum qui dolorem eum fugiat quo voluptas nulla pariatur.</p>
+    <p>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris.</p>
+    <p>Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.</p>
+    <p>Sed ut perspiciatis unde omnis iste natus error sit voluptatem accusantium doloremque laudantium, totam rem aperiam, eaque ipsa quae ab illo inventore veritatis et quasi architecto beatae vitae dicta sunt explicabo.</p>
+</article>
+
+<script>
+    (function () {
+        'use strict';
+
+        // ── Каталог сборок чата ────────────────────────────────────────────────
+        var CHATS = [
+            {id: 'none', label: 'Без чата', src: null, note: 'чистая страница'},
+            {id: 'search-bar', label: 'Demo: поисковая строка', src: 'root/assets/demo-search-bar.js', type: 'module'},
+            {id: 'mascot', label: 'Demo: маскот', src: 'root/assets/demo-maskot.js', type: 'module'},
+            {id: 'primary-hints', label: 'Demo: primary-подсказки', src: 'root/assets/demo-primary-hints.js', type: 'module'},
+            {id: 'new-logo', label: 'Demo: новый логотип чата', src: 'root/assets/new-chat-logo.js', type: 'module'},
+            {id: 'notifications', label: 'Demo: новые уведомления', src: 'root/assets/new-notifications.js', type: 'module'},
+            {id: 'woman', label: 'Сборка woman.ru', src: 'root/assets/index-woman.js', type: 'module'},
+            {id: 'auchan', label: 'Сборка Ашан / Поварёнок', src: 'root/assets/index-auchan.js', type: 'module'},
+            {id: 'tolkoexamen', label: 'Сборка ЕГЭ (tolkoexamen)', src: 'root/assets/index-CZjRHVzK.js', type: 'module'},
+            {id: 'gismeteo-cdn', label: 'Gismeteo (CDN)', src: 'https://demo-cdn.ttii.tech/gismeteo/chat.js', type: 'classic'},
+            {id: 'custom', label: 'Свой скрипт по URL…', src: '', type: 'module'}
+        ];
+
+        var LAUNCHERS = [
+            {id: '', label: 'Как в сборке'},
+            {id: 'search', label: 'Поисковая строка'},
+            {id: 'mascot', label: 'Маскот'}
+        ];
+
+        var SIZES = [
+            {id: '', label: 'По умолчанию'},
+            {id: 'small', label: 'small'},
+            {id: 'quarter', label: 'quarter'},
+            {id: 'full', label: 'full'}
+        ];
+
+        var THEMES = [
+            {id: 'vtb', label: 'Standard'},
+            {id: 'flo', label: 'Flo'},
+            {id: 'flo-dark', label: 'Flo Dark'}
+        ];
+
+        // ── Готовые сниппеты инжекта ───────────────────────────────────────────
+        var SNIPPETS = [
+            {
+                id: 'launcher-search', label: 'Лаунчер: поисковая строка',
+                code: "window.TTII_CHAT_LAUNCHER = 'search';"
+            },
+            {
+                id: 'launcher-mascot', label: 'Лаунчер: маскот',
+                code: "window.TTII_CHAT_LAUNCHER = 'mascot';"
+            },
+            {
+                id: 'launcher-query', label: 'Лаунчер из ?launcher= в адресе',
+                code: "window.TTII_CHAT_LAUNCHER =\n  new URLSearchParams(location.search).get('launcher') || 'search';"
+            },
+            {
+                id: 'brand', label: 'Брендинг и цвета (TTII_CHAT_CONFIG)',
+                code: "// В сборках под конкретный сайт (woman / Ашан / ЕГЭ) собственный конфиг сайта\n"
+                    + "// применяется поверх TTII_CHAT_CONFIG — там перебиваются не все поля.\n"
+                    + "window.TTII_CHAT_CONFIG = {\n"
+                    + "  theme: {\n"
+                    + "    brand: '#3da2c7',\n"
+                    + "    brandLight: 'color-mix(in srgb, #3da2c7 85%, #ffffff)',\n"
+                    + "    baseBorder: '#dceaf3',\n"
+                    + "    actionBase: '#1f85ab',\n"
+                    + "    focus: '#3da2c7',\n"
+                    + "    shadowColor: 'rgba(0, 92, 132, 0.44)'\n"
+                    + "  },\n"
+                    + "  branding: {\n"
+                    + "    title: 'Мой ассистент',\n"
+                    + "    caption: 'AI помощник',\n"
+                    + "    logoUrl: 'root/logo.png'\n"
+                    + "  },\n"
+                    + "  behavior: { size: 'small', launcher: 'search', disableOnMobile: false }\n"
+                    + "};"
+            },
+            {
+                id: 'size', label: 'Размер окна при старте',
+                code: "window.TTII_CHAT_SIZE = 'quarter'; // small | quarter | full"
+            },
+            {
+                id: 'mobile', label: 'Включить на мобильных',
+                code: "window.TTII_DISABLE_ON_MOBILE = false;"
+            },
+            {
+                id: 'mock-primary', label: 'Мок primary-подсказок',
+                code: "window.TTII_MOCK_PRIMARY = true;"
+            },
+            {
+                id: 'log', label: 'Лог событий чата в консоль',
+                code: "['message', 'ttii:open', 'ttii:close'].forEach(function (name) {\n"
+                    + "  window.addEventListener(name, function (e) { console.log('[ttii]', name, e.detail || e.data); });\n"
+                    + "});"
+            }
+        ];
+
+        var LS_STATE = 'ttii-playground:state';
+        var LS_SNIPPETS = 'ttii-playground:snippets';
+        var LS_PANEL = 'ttii-playground:panel-open';
+
+        var DEMOS = [
+            ['ЕГЭ (tolkoexamen)', 'root/index.html'],
+            ['Gismeteo · search', 'root/gismeteo.html'],
+            ['Gismeteo · mascot', 'root/gismeteo-2.html'],
+            ['Gismeteo mobile · search', 'root/m-gismeteo.html'],
+            ['Gismeteo mobile · mascot', 'root/m-gismeteo-2.html'],
+            ['Поварёнок · search', 'root/povarenok-recipes.html'],
+            ['Поварёнок · mascot', 'root/povarenok-recipes2.html'],
+            ['Woman.ru · search', 'root/woman-ru.html'],
+            ['Woman.ru · mascot', 'root/woman-ru2.html'],
+            ['Demo: search bar', 'root/demo-search-bar.html'],
+            ['Demo: маскот', 'root/demo-maskot.html'],
+            ['Demo: primary hints', 'root/demo-primary-hints.html'],
+            ['Demo: новый логотип', 'root/new-chat-logo.html'],
+            ['Demo: уведомления', 'root/new-notifications.html']
+        ];
+
+        // ── Состояние ──────────────────────────────────────────────────────────
+        var DEFAULTS = {
+            chat: 'search-bar', customSrc: '', customType: 'module', launcher: '', size: '',
+            showOnMobile: false, theme: 'vtb', code: ''
+        };
+
+        function b64encode(str) {
+            var bytes = new TextEncoder().encode(str), bin = '';
+            for (var i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+            return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+        }
+
+        function b64decode(str) {
+            var bin = atob(str.replace(/-/g, '+').replace(/_/g, '/'));
+            var bytes = new Uint8Array(bin.length);
+            for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+            return new TextDecoder().decode(bytes);
+        }
+
+        function readJSON(key, fallback) {
+            try {
+                var raw = localStorage.getItem(key);
+                return raw ? JSON.parse(raw) : fallback;
+            } catch (e) {
+                return fallback;
+            }
+        }
+
+        function writeJSON(key, value) {
+            try {
+                localStorage.setItem(key, JSON.stringify(value));
+            } catch (e) { /* приватный режим — работаем без сохранения */ }
+        }
+
+        function loadState() {
+            var state = Object.assign({}, DEFAULTS, readJSON(LS_STATE, null) || {});
+
+            // ссылка вида #s=<base64 json> — полное состояние
+            var hash = /(?:^|[#&])s=([^&]+)/.exec(location.hash);
+            if (hash) {
+                try {
+                    state = Object.assign(state, JSON.parse(b64decode(hash[1])));
+                } catch (e) { /* битая ссылка — игнорируем */ }
+            }
+
+            // короткие параметры ?chat=&launcher=&theme=&size= перекрывают сохранённое
+            var q = new URLSearchParams(location.search);
+            ['chat', 'launcher', 'theme', 'size', 'customSrc', 'customType'].forEach(function (key) {
+                if (q.has(key)) state[key] = q.get(key);
+            });
+            if (q.has('mobile')) state.showOnMobile = q.get('mobile') !== '0';
+            return state;
+        }
+
+        var state = loadState();
+        var userSnippets = readJSON(LS_SNIPPETS, []) || [];
+
+        function chatById(id) {
+            for (var i = 0; i < CHATS.length; i++) if (CHATS[i].id === id) return CHATS[i];
+            return CHATS[0];
+        }
+
+        // ── Загрузка чата ──────────────────────────────────────────────────────
+        function status(text, isError) {
+            var el = document.getElementById('pgStatus');
+            el.textContent = text;
+            el.className = 'pg-status' + (isError ? ' pg-err' : '');
+        }
+
+        function applyGlobals(s) {
+            document.body.id = s.theme || 'vtb';
+            if (s.launcher) window.TTII_CHAT_LAUNCHER = s.launcher;
+            if (s.size) window.TTII_CHAT_SIZE = s.size;
+            if (s.showOnMobile) window.TTII_DISABLE_ON_MOBILE = false;
+        }
+
+        function runInjectedCode(code) {
+            if (!code || !code.trim()) return true;
+            var el = document.createElement('script');
+            el.textContent = code;
+            el.dataset.ttiiInject = 'user';
+            var ok = true;
+            var onError = function (e) {
+                ok = false;
+                status('Ошибка в своём скрипте: ' + e.message, true);
+            };
+            window.addEventListener('error', onError, {once: true});
+            document.head.appendChild(el);
+            window.removeEventListener('error', onError);
+            return ok;
+        }
+
+        function loadChat(s) {
+            var chat = chatById(s.chat);
+            var isCustom = chat.id === 'custom';
+            var src = isCustom ? (s.customSrc || '').trim() : chat.src;
+            if (!src) {
+                status(isCustom ? 'Укажите URL своего скрипта и нажмите «Применить».' : 'Чат не подключён.');
+                return;
+            }
+            var type = isCustom ? s.customType : chat.type;
+            var el = document.createElement('script');
+            if (type === 'classic') el.defer = true; else el.type = 'module';
+            el.crossOrigin = 'anonymous';
+            el.src = src;
+            el.onerror = function () {
+                status('Не удалось загрузить ' + src, true);
+            };
+            el.onload = function () {
+                status('Подключено: ' + chat.label + ' → ' + src);
+            };
+            document.body.appendChild(el);
+            status('Загружаю ' + src + '…');
+        }
+
+        // ── Панель ─────────────────────────────────────────────────────────────
+        var dirty = false;
+
+        function markDirty() {
+            dirty = true;
+            var btn = document.getElementById('pgApply');
+            btn.classList.add('pg-dirty');
+            btn.textContent = 'Применить (перезагрузка)';
+        }
+
+        function option(name, item, checked, onChange, extra) {
+            var label = document.createElement('label');
+            label.className = 'pg-opt';
+            var input = document.createElement('input');
+            input.type = 'radio';
+            input.name = name;
+            input.value = item.id;
+            input.checked = checked;
+            input.addEventListener('change', function () {
+                onChange(item.id);
+            });
+            var text = document.createElement('span');
+            var strong = document.createElement('b');
+            strong.textContent = item.label;
+            text.appendChild(strong);
+            if (extra) {
+                var small = document.createElement('small');
+                small.textContent = extra;
+                text.appendChild(small);
+            }
+            label.appendChild(input);
+            label.appendChild(text);
+            return label;
+        }
+
+        function buildPanel() {
+            var chats = document.getElementById('pgChats');
+            var customSrc = document.getElementById('pgCustomSrc');
+            var customType = document.getElementById('pgCustomType');
+            CHATS.forEach(function (chat) {
+                chats.appendChild(option('pg-chat', chat, state.chat === chat.id, function (id) {
+                    state.chat = id;
+                    customSrc.hidden = customType.hidden = id !== 'custom';
+                    markDirty();
+                }, chat.note || chat.src || undefined));
+            });
+            customSrc.hidden = customType.hidden = state.chat !== 'custom';
+            customSrc.value = state.customSrc || '';
+            customType.value = state.customType || 'module';
+            customSrc.addEventListener('input', function () {
+                state.customSrc = customSrc.value;
+                markDirty();
+            });
+            customType.addEventListener('change', function () {
+                state.customType = customType.value;
+                markDirty();
+            });
+
+            var launchers = document.getElementById('pgLaunchers');
+            LAUNCHERS.forEach(function (item) {
+                launchers.appendChild(option('pg-launcher', item, state.launcher === item.id, function (id) {
+                    state.launcher = id;
+                    markDirty();
+                }));
+            });
+
+            var sizes = document.getElementById('pgSizes');
+            SIZES.forEach(function (item) {
+                sizes.appendChild(option('pg-size', item, state.size === item.id, function (id) {
+                    state.size = id;
+                    markDirty();
+                }));
+            });
+
+            var mobile = document.getElementById('pgMobile');
+            mobile.checked = !!state.showOnMobile;
+            mobile.addEventListener('change', function () {
+                state.showOnMobile = mobile.checked;
+                markDirty();
+            });
+
+            // Тему применяем сразу — она не требует перезагрузки.
+            var themes = document.getElementById('pgThemes');
+            THEMES.forEach(function (item) {
+                themes.appendChild(option('pg-theme', item, state.theme === item.id, function (id) {
+                    state.theme = id;
+                    document.body.id = id;
+                    persist();
+                }));
+            });
+
+            var demos = document.getElementById('pgDemos');
+            DEMOS.forEach(function (pair) {
+                var a = document.createElement('a');
+                a.href = pair[1];
+                a.textContent = pair[0];
+                demos.appendChild(a);
+            });
+
+            document.getElementById('pgCode').value = state.code || '';
+            document.getElementById('pgCode').addEventListener('input', function () {
+                state.code = this.value;
+                markDirty();
+            });
+
+            renderSnippets();
+        }
+
+        function allSnippets() {
+            return SNIPPETS.concat(userSnippets);
+        }
+
+        function renderSnippets() {
+            var select = document.getElementById('pgSnippets');
+            select.textContent = '';
+            allSnippets().forEach(function (snippet, index) {
+                var opt = document.createElement('option');
+                opt.value = String(index);
+                opt.textContent = (index >= SNIPPETS.length ? '★ ' : '') + snippet.label;
+                select.appendChild(opt);
+            });
+        }
+
+        function currentSnippet() {
+            var select = document.getElementById('pgSnippets');
+            return allSnippets()[Number(select.value)] || null;
+        }
+
+        function persist() {
+            writeJSON(LS_STATE, state);
+        }
+
+        function shareUrl() {
+            return location.origin + location.pathname + '#s=' + b64encode(JSON.stringify(state));
+        }
+
+        function wireActions() {
+            var code = document.getElementById('pgCode');
+
+            document.getElementById('pgSnipInsert').addEventListener('click', function () {
+                var snippet = currentSnippet();
+                if (!snippet) return;
+                code.value = (code.value.trim() ? code.value.replace(/\s*$/, '') + '\n\n' : '') + snippet.code;
+                state.code = code.value;
+                markDirty();
+            });
+
+            document.getElementById('pgSnipReplace').addEventListener('click', function () {
+                var snippet = currentSnippet();
+                if (!snippet) return;
+                code.value = snippet.code;
+                state.code = code.value;
+                markDirty();
+            });
+
+            document.getElementById('pgSnipSave').addEventListener('click', function () {
+                if (!code.value.trim()) return status('Пустой код — нечего сохранять.', true);
+                var name = prompt('Название своего сниппета:');
+                if (!name) return;
+                userSnippets.push({id: 'user-' + Date.now(), label: name, code: code.value});
+                writeJSON(LS_SNIPPETS, userSnippets);
+                renderSnippets();
+                document.getElementById('pgSnippets').value = String(allSnippets().length - 1);
+                status('Сниппет «' + name + '» сохранён.');
+            });
+
+            document.getElementById('pgSnipDelete').addEventListener('click', function () {
+                var select = document.getElementById('pgSnippets');
+                var index = Number(select.value) - SNIPPETS.length;
+                if (index < 0) return status('Встроенные сниппеты удалить нельзя.', true);
+                var removed = userSnippets.splice(index, 1)[0];
+                writeJSON(LS_SNIPPETS, userSnippets);
+                renderSnippets();
+                status('Удалён сниппет «' + removed.label + '».');
+            });
+
+            document.getElementById('pgApply').addEventListener('click', function () {
+                persist();
+                location.hash = 's=' + b64encode(JSON.stringify(state));
+                location.reload();
+            });
+
+            document.getElementById('pgCopy').addEventListener('click', function () {
+                var url = shareUrl();
+                persist();
+                if (navigator.clipboard && navigator.clipboard.writeText) {
+                    navigator.clipboard.writeText(url).then(function () {
+                        status('Ссылка на текущую конфигурацию скопирована.');
+                    }, function () {
+                        prompt('Ссылка:', url);
+                    });
+                } else {
+                    prompt('Ссылка:', url);
+                }
+            });
+
+            document.getElementById('pgReset').addEventListener('click', function () {
+                if (!confirm('Сбросить настройки стенда (свои сниппеты останутся)?')) return;
+                writeJSON(LS_STATE, DEFAULTS);
+                location.hash = '';
+                location.search = '';
+                location.reload();
+            });
+
+            var panel = document.getElementById('pgPanel');
+            var toggle = document.getElementById('pgToggle');
+
+            function setOpen(open) {
+                panel.hidden = !open;
+                toggle.hidden = open;
+                writeJSON(LS_PANEL, open);
+            }
+
+            document.getElementById('pgClose').addEventListener('click', function () {
+                setOpen(false);
+            });
+            toggle.addEventListener('click', function () {
+                setOpen(true);
+            });
+            setOpen(readJSON(LS_PANEL, true) !== false);
+        }
+
+        buildPanel();
+        wireActions();
+        persist();
+
+        applyGlobals(state);
+        runInjectedCode(state.code);
+        loadChat(state);
+    })();
+</script>
+
+</body>
+
+</html>
